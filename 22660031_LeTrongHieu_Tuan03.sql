@@ -1,5 +1,4 @@
 ﻿
---- 22640421 - Ngô Duy Thông - Tuan03 ---
 --1) Tạo hai bảng mới trong cơ sở dữ liệu AdventureWorks2008 theo cấu trúc sau:
 --create table
 --MyDepartment (
