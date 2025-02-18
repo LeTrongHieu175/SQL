@@ -1,43 +1,23 @@
-﻿
+
 --1) Tạo hai bảng mới trong cơ sở dữ liệu AdventureWorks2008 theo cấu trúc sau:
---create table
---MyDepartment (
---DepID smallint not null primary
---key, DepName nvarchar(50),
---GrpName
---nvarchar(50)
---)
---create table MyEmployee (
---EmpID int not null primary
---key, FrstName nvarchar(50),
---MidName
---nvarchar(50),
---LstName
---nvarchar(50),
---DepID smallint not null foreign key
---references MyDepartment(DepID)
---)
--- Tạo bảng MyDepartment
-create table MyDepartment 
-	(
-    DepID smallint not null primary key,
-    DepName nvarchar(50),
-    GrpName nvarchar(50)
-	)
-
--- Tạo bảng MyEmployee
-create table MyEmployee (
-    EmpID int not null primary key,
-    FrstName nvarchar(50),
-    MidName nvarchar(50),
-    LstName nvarchar(50),
-    DepID smallint not null foreign key references MyDepartment(DepID)
+create table
+MyDepartment (
+DepID smallint not null primary key, 
+DepName nvarchar(50),
+GrpName nvarchar(50)
 )
-
+create table MyEmployee (
+EmpID int not null primary key, 
+FrstName nvarchar(50),
+MidName nvarchar(50),
+LstName nvarchar(50),
+DepID smallint not null foreign key
+references MyDepartment(DepID)
+)
 --2) Dùng lệnh insert <TableName1> select <fieldList> from
 --<TableName2> chèn dữ liệu cho bảng MyDepartment, lấy dữ liệu từ
 --bảng [HumanResources].[Department].
-insert into MyDepartment (DepID, DepName, GrpName)
+insert into MyDepartment
 select DepartmentID, Name, GroupName 
 from [HumanResources].[Department]
 
@@ -45,14 +25,29 @@ from [HumanResources].[Department]
 --từ 2 bảng
 --[Person].[Person] và
 --[HumanResources].[EmployeeDepartmentHistory]
-select d.BusinessEntityID, FirstName, MiddleName, LastName, DepartmentID
+insert into MyEmployee
+select top 4 d.BusinessEntityID, FirstName, MiddleName, LastName, DepartmentID
 from HumanResources.EmployeeDepartmentHistory d join Person.Person p on p.BusinessEntityID = d.BusinessEntityID
-where d.BusinessEntityID between 60 and 80
+where DepartmentID = 1
+select * from MyEmployee
+
+insert into MyEmployee
+select top 8 d.BusinessEntityID, FirstName, MiddleName, LastName, DepartmentID
+from HumanResources.EmployeeDepartmentHistory d join Person.Person p on p.BusinessEntityID = d.BusinessEntityID
+where DepartmentID = 7
+select * from MyEmployee
+
+insert into MyEmployee
+select top 8 d.BusinessEntityID, FirstName, MiddleName, LastName, DepartmentID
+from HumanResources.EmployeeDepartmentHistory d join Person.Person p on p.BusinessEntityID = d.BusinessEntityID
+where DepartmentID = 3
+select * from MyEmployee
 
 --4) Dùng lệnh delete xóa 1 record trong bảng MyDepartment với DepID=1,
 --có thực hiện được không? Vì sao?
 delete from MyDepartment where DepID = 1
--- Có thể thực hiện được nếu không có các ràng buộc ngoại
+-- Không vì mất cha con mồ côi
+
 --5) Thêm một default constraint vào field DepID trong bảng MyEmployee,
 --với giá trị mặc định là 1.
 -- Thêm default constraint vào trường DepID trong bảng MyEmployee
