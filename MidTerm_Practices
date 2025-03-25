@@ -1,0 +1,145 @@
+-- Câu 1: Tạo VIEW danh sách đơn hàng có tổng giá trị trên một ngưỡng nhất định
+-- Đề bài: Viết một VIEW hiển thị danh sách các đơn hàng có tổng giá trị trên 5000.
+-- Thông tin hiển thị gồm mã đơn hàng, mã khách hàng, họ và tên khách hàng, ngày đặt hàng, tổng giá trị đơn hàng,
+-- và phân loại đơn hàng dựa vào tổng giá trị (Cao: >=10000, Trung bình: >=7000, Thấp: <7000).
+CREATE VIEW vw_HighValueOrders AS
+SELECT 
+    soh.SalesOrderID AS MaDonHang, 
+    c.CustomerID AS MaKhachHang, 
+    p.FirstName + ' ' + p.LastName AS HoTenKhachHang,
+    soh.OrderDate AS NgayDatHang, 
+    soh.TotalDue AS TongGiaTri,
+    CASE 
+        WHEN soh.TotalDue >= 10000 THEN 'Cao'
+        WHEN soh.TotalDue >= 7000 THEN 'Trung bình'
+        ELSE 'Thấp'
+    END AS PhanLoai
+FROM Sales.SalesOrderHeader soh
+JOIN Sales.Customer c ON soh.CustomerID = c.CustomerID
+JOIN Person.Person p ON c.PersonID = p.BusinessEntityID
+WHERE soh.TotalDue >= 5000;
+GO
+
+-- Câu 2: Tạo Stored Procedure cập nhật lương nhân viên có xử lý lỗi
+-- Đề bài: Viết một Stored Procedure nhận vào mã nhân viên và mức lương mới.
+-- Kiểm tra xem nhân viên có tồn tại không, nếu không trả về lỗi.
+-- Kiểm tra nếu mức lương mới quá thấp hoặc quá cao so với mức hiện tại thì từ chối cập nhật.
+-- Nếu hợp lệ, cập nhật mức lương và ghi lại thay đổi vào bảng lịch sử.
+-- Sử dụng TRANSACTION để đảm bảo toàn vẹn dữ liệu.
+CREATE TABLE SalaryChangeLog (
+    LogID INT IDENTITY PRIMARY KEY,
+    MaNhanVien INT,
+    LuongCu MONEY,
+    LuongMoi MONEY,
+    NgayThayDoi DATETIME DEFAULT GETDATE()
+);
+GO
+
+CREATE PROCEDURE usp_UpdateEmployeeSalary
+    @MaNhanVien INT,
+    @LuongMoi MONEY
+AS
+BEGIN
+    DECLARE @LuongCu MONEY;
+
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        IF NOT EXISTS (SELECT 1 FROM HumanResources.EmployeePayHistory WHERE BusinessEntityID = @MaNhanVien)
+        BEGIN
+            RAISERROR ('Không tìm thấy nhân viên', 16, 1);
+            ROLLBACK TRANSACTION;
+            RETURN;
+        END
+
+        SELECT @LuongCu = Rate 
+        FROM HumanResources.EmployeePayHistory 
+        WHERE BusinessEntityID = @MaNhanVien;
+
+        IF @LuongMoi < @LuongCu * 0.5 OR @LuongMoi > @LuongCu * 2
+        BEGIN
+            RAISERROR ('Mức lương mới không hợp lệ', 16, 1);
+            ROLLBACK TRANSACTION;
+            RETURN;
+        END
+
+        UPDATE HumanResources.EmployeePayHistory
+        SET Rate = @LuongMoi
+        WHERE BusinessEntityID = @MaNhanVien;
+
+        INSERT INTO SalaryChangeLog (MaNhanVien, LuongCu, LuongMoi)
+        VALUES (@MaNhanVien, @LuongCu, @LuongMoi);
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        PRINT ERROR_MESSAGE();
+    END CATCH
+END;
+GO
+
+-- Câu 3: Tạo Function Table-Valued tính hiệu suất bán hàng của nhân viên
+-- Đề bài: Viết một Function Table-Valued trả về hiệu suất bán hàng của nhân viên.
+-- Kết quả gồm mã nhân viên, họ và tên, tổng số đơn hàng đã xử lý, tổng doanh số bán hàng,
+-- và mức đánh giá dựa vào tổng doanh số (Xuất sắc: >=500000, Tốt: >=200000, Trung bình: >=100000, Kém: <100000).
+CREATE FUNCTION fn_GetEmployeeSalesPerformance ()
+RETURNS @KetQua TABLE (
+    MaNhanVien INT,
+    HoTenNhanVien NVARCHAR(100),
+    TongDonHang INT,
+    TongDoanhSo MONEY,
+    DanhGia NVARCHAR(20)
+)
+AS
+BEGIN
+    INSERT INTO @KetQua
+    SELECT 
+        e.BusinessEntityID AS MaNhanVien,
+        p.FirstName + ' ' + p.LastName AS HoTenNhanVien,
+        COUNT(s.SalesOrderID) AS TongDonHang,
+        SUM(s.TotalDue) AS TongDoanhSo,
+        CASE
+            WHEN SUM(s.TotalDue) >= 500000 THEN 'Xuất sắc'
+            WHEN SUM(s.TotalDue) >= 200000 THEN 'Tốt'
+            WHEN SUM(s.TotalDue) >= 100000 THEN 'Trung bình'
+            ELSE 'Kém'
+        END AS DanhGia
+    FROM Sales.SalesPerson sp
+    JOIN HumanResources.Employee e ON sp.BusinessEntityID = e.BusinessEntityID
+    JOIN Person.Person p ON e.BusinessEntityID = p.BusinessEntityID
+    JOIN Sales.SalesOrderHeader s ON sp.BusinessEntityID = s.SalesPersonID
+    GROUP BY e.BusinessEntityID, p.FirstName, p.LastName;
+
+    RETURN;
+END;
+GO
+
+-- Câu 4: Tạo Function Scalar-Valued tính tổng doanh số của một nhân viên
+-- Đề bài: Viết một Function Scalar-Valued nhận mã nhân viên và trả về tổng doanh số mà nhân viên đó đã bán.
+CREATE FUNCTION fn_GetTotalSalesByEmployee (@MaNhanVien INT)
+RETURNS MONEY
+AS
+BEGIN
+    DECLARE @TongDoanhSo MONEY;
+    SELECT @TongDoanhSo = SUM(TotalDue)
+    FROM Sales.SalesOrderHeader
+    WHERE SalesPersonID = @MaNhanVien;
+    RETURN ISNULL(@TongDoanhSo, 0);
+END;
+GO
+
+-- Câu 5: Tạo Function Scalar-Valued kiểm tra xem một khách hàng có phải VIP không
+-- Đề bài: Viết một Function Scalar-Valued nhận mã khách hàng và trả về 1 nếu khách hàng có tổng mua hàng >=100000, ngược lại trả về 0.
+CREATE FUNCTION fn_IsVipCustomer (@MaKhachHang INT)
+RETURNS BIT
+AS
+BEGIN
+    DECLARE @IsVip BIT;
+    IF (SELECT SUM(TotalDue) FROM Sales.SalesOrderHeader WHERE CustomerID = @MaKhachHang) >= 100000
+        SET @IsVip = 1;
+    ELSE
+        SET @IsVip = 0;
+    RETURN @IsVip;
+END;
+GO
